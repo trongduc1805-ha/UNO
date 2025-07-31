@@ -1,19 +1,83 @@
-// SettleUpScreen.tsx (phần cần sửa – giữ nguyên các đoạn khác)
+// SettleUpScreen.tsx
 import React, { useState, useMemo } from 'react';
-import { SettledBill, Member, SplitMethod, Expense } from '../types';
+import { SettledBill, Member, SplitMethod } from '../types';
 import { BANK_INFO } from '../constants';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 
-/* ---------- QR + Share ---------- */
+/* ---------- 1. Hàm tạo PDF dùng chung ---------- */
+const buildPdfBlob = (bill: SettledBill, members: Member[]) => {
+  const doc = new jsPDF({ orientation: 'landscape' });
+
+  const formatNumber = (amount: number) => Math.round(amount).toLocaleString('en-US');
+  const expenseNames = [...new Set(bill.expenses.map(e => e.itemName))].sort();
+  const participatingMembers = members.filter(m =>
+    bill.expenses.some(e => e.payer === m || e.participants.includes(m))
+  );
+
+  const memberData: any = {};
+  participatingMembers.forEach(m => (memberData[m] = { totalPaid: 0, totalShare: 0, shares: {} }));
+
+  bill.expenses.forEach(ex => {
+    memberData[ex.payer].totalPaid += ex.amount;
+    const share = ex.splitMethod === SplitMethod.EVENLY ? ex.amount / ex.participants.length : 0;
+    ex.participants.forEach(p => {
+      const s = ex.splitMethod === SplitMethod.EVENLY ? share : (ex.manualSplits?.[p] ?? 0);
+      if (!memberData[p]) memberData[p] = { totalPaid: 0, totalShare: 0, shares: {} };
+      memberData[p].totalShare += s;
+      memberData[p].shares[ex.itemName] = (memberData[p].shares[ex.itemName] || 0) + s;
+    });
+  });
+
+  const head = [['Member', ...expenseNames, 'Amount Paid', 'Net Balance']];
+  const body: any[][] = participatingMembers.map(m => {
+    const { totalPaid, totalShare, shares } = memberData[m];
+    const net = totalPaid - totalShare;
+    return [
+      m,
+      ...expenseNames.map(n => formatNumber(shares[n] || 0)),
+      formatNumber(totalPaid),
+      { content: formatNumber(net), styles: { textColor: net >= 0 ? [0, 100, 0] : [220, 38, 38] } }
+    ];
+  });
+
+  // sum row
+  const sumRow = [{ content: 'SUM', styles: { fontStyle: 'bold' } }];
+  expenseNames.forEach(n => sumRow.push({ content: formatNumber(bill.expenses.filter(e => e.itemName === n).reduce((s, e) => s + e.amount, 0)), styles: { fontStyle: 'bold' } }));
+  const totalPaidSum = Object.values(memberData).reduce((s: any, d: any) => s + d.totalPaid, 0);
+  const totalNetSum = Object.values(memberData).reduce((s: any, d: any) => s + (d.totalPaid - d.totalShare), 0);
+  sumRow.push({ content: formatNumber(totalPaidSum), styles: { fontStyle: 'bold' } });
+  sumRow.push({ content: formatNumber(totalNetSum), styles: { fontStyle: 'bold' } });
+  body.push(sumRow);
+
+  autoTable(doc, {
+    startY: 40,
+    head,
+    body,
+    theme: 'grid',
+    headStyles: { fillColor: '#fdba74', textColor: '#000000', fontStyle: 'bold' },
+    didParseCell: (data) => {
+      if (data.row.index === body.length - 1) data.cell.styles.fillColor = '#fcd34d';
+      if (data.column.index > 0) data.cell.styles.halign = 'right';
+    }
+  });
+
+  return doc.output('blob');
+};
+
+/* ---------- 2. Component QR + Share ---------- */
 const QrCodeDisplay: React.FC<{
   amount: number;
   debtorName: string;
   creditorName: Member;
   expensesPaid: { name: string; amount: number }[];
   expensesParticipated: { name: string; amount: number }[];
-}> = ({ amount, debtorName, creditorName, expensesPaid, expensesParticipated }) => {
+  bill: SettledBill;
+  members: Member[];
+}> = ({ amount, debtorName, creditorName, expensesPaid, expensesParticipated, bill, members }) => {
   const creditorBankInfo = BANK_INFO[creditorName];
   if (!creditorBankInfo)
     return <p className="text-sm text-status-negative">Không tìm thấy thông tin ngân hàng cho {creditorName}.</p>;
@@ -24,7 +88,6 @@ const QrCodeDisplay: React.FC<{
     amount
   )}&addInfo=${addInfo}`;
 
-  /* tin nhắn chia sẻ */
   const shareMessage = useMemo(() => {
     let msg = `💸 ${debtorName} cần chuyển ${formatCurrency(amount)} cho ${creditorName}\n\n`;
     if (expensesPaid.length) {
@@ -53,20 +116,35 @@ const QrCodeDisplay: React.FC<{
     }
   };
 
-  /* Chia sẻ */
+  /* Chia sẻ QR + PDF bảng tổng hợp */
   const handleShare = async () => {
-    if (navigator.share) {
-      try {
+    try {
+      const pdfBlob = buildPdfBlob(bill, members);
+      const pdfFile = new File(
+        [pdfBlob],
+        `UNO_Report_${bill.date.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+        { type: 'application/pdf' }
+      );
+
+      const qrBlob = await (await fetch(qrUrl)).blob();
+      const qrFile = new File(
+        [qrBlob],
+        `QR_TT_${debtorName}_cho_${creditorName}.png`,
+        { type: 'image/png' }
+      );
+
+      if (navigator.share && navigator.canShare({ files: [pdfFile, qrFile] })) {
         await navigator.share({
           title: 'Thanh toán UNO',
           text: shareMessage,
-          url: qrUrl,
+          files: [pdfFile, qrFile],
         });
-      } catch {}
-    } else {
-      // fallback cho desktop
-      navigator.clipboard.writeText(`${shareMessage}\n${qrUrl}`);
-      alert('Đã sao chép vào clipboard!');
+      } else {
+        navigator.clipboard.writeText(`${shareMessage}\nQR: ${qrUrl}\nPDF: (vui lòng tải thủ công)`);
+        alert('Đã sao chép vào clipboard!');
+      }
+    } catch (e) {
+      console.error('Share failed', e);
     }
   };
 
@@ -81,13 +159,7 @@ const QrCodeDisplay: React.FC<{
           onClick={handleDownloadQr}
           className="inline-flex items-center gap-2 bg-replit-item hover:bg-replit-hover text-replit-text text-sm font-semibold py-2 px-3 rounded-lg transition-colors"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
+          <svg xmlns="http://www          .org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           Tải QR
@@ -97,13 +169,7 @@ const QrCodeDisplay: React.FC<{
           onClick={handleShare}
           className="inline-flex items-center gap-2 bg-action-primary hover:bg-action-primary-hover text-white text-sm font-semibold py-2 px-3 rounded-lg transition-colors"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v10" />
           </svg>
           Chia sẻ
@@ -112,9 +178,8 @@ const QrCodeDisplay: React.FC<{
     </div>
   );
 };
-/* ---------- END QR + Share ---------- */
 
-/* (phần cũ giữ nguyên từ đây) */
+/* ---------- 3. Icon helpers ---------- */
 const ChevronLeftIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -126,6 +191,7 @@ const ChevronRightIcon = () => (
   </svg>
 );
 
+/* ---------- 4. ExpenseDetails ---------- */
 const ExpenseDetails: React.FC<{ title: string; expenses: { name: string; amount: number }[] }> = ({ title, expenses }) => {
   if (expenses.length === 0) return null;
   return (
@@ -143,6 +209,7 @@ const ExpenseDetails: React.FC<{ title: string; expenses: { name: string; amount
   );
 };
 
+/* ---------- 5. Main SettleUpScreen ---------- */
 interface SettleUpScreenProps {
   bill: SettledBill;
   members: Member[];
@@ -242,6 +309,8 @@ export default function SettleUpScreen({ bill, members, onGoHome, isHistoryView 
                 creditorName={bill.mainCreditor}
                 expensesPaid={expensesPaid}
                 expensesParticipated={expensesParticipated}
+                bill={bill}
+                members={members}
               />
             </div>
           )}
@@ -261,6 +330,8 @@ export default function SettleUpScreen({ bill, members, onGoHome, isHistoryView 
                       creditorName={t.to}
                       expensesPaid={expensesPaid}
                       expensesParticipated={expensesParticipated}
+                      bill={bill}
+                      members={members}
                     />
                   </div>
                 ))}
@@ -292,4 +363,4 @@ export default function SettleUpScreen({ bill, members, onGoHome, isHistoryView 
       </button>
     </div>
   );
-}
+};
