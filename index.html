@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UNO - Đi đâu cũng được miễn là cùng nhau </title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              replit: {
+                bg: '#0E1014',
+                container: '#1C1E24',
+                item: '#2A2D35',
+                border: '#383C47',
+                hover: '#464A59',
+                text: '#F0F0F0',
+                'text-secondary': '#A0A0A0',
+              },
+              brand: {
+                red: '#ef4444',
+                yellow: '#f59e0b',
+                blue: '#22C55E', // Unified to green
+              },
+              action: {
+                primary: '#22C55E', // green-500
+                'primary-hover': '#16A34A', // green-600
+                secondary: '#22C55E', // Unified to green
+                'secondary-hover': '#16A34A', // Unified to green-hover
+                destructive: '#ef4444', // red-500
+                'destructive-hover': '#dc2626', // red-600
+              },
+              status: {
+                positive: '#22C55E',
+                negative: '#ef4444',
+              }
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-in-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* For Webkit-based browsers (Chrome, Safari) */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #1C1E24; /* replit-container */
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #383C47; /* replit-border */
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #464A59; /* replit-hover */
+      }
+
+      /* Basic body styling */
+      body {
+        background-color: #0E1014; /* replit-bg */
+        color: #F0F0F0; /* replit-text */
+      }
+
+      /* Remove number input spinners */
+      input[type=number]::-webkit-inner-spin-button,
+      input[type=number]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type=number] {
+        -moz-appearance: textfield;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "framer-motion": "https://esm.sh/framer-motion@^11.0.0",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "jspdf-autotable": "https://esm.sh/jspdf-autotable@3.8.2"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
