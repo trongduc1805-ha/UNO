@@ -2,17 +2,17 @@
 import { Member } from './types';
 
 export const MEMBERS: Member[] = [
-  "Ngọc Bảo",
-  "Quang Chiến",
-  "Khắc Đạt",
-  "Thiện Đức",
-  "Trọng Đức",
-  "Khánh Ngọc",
-  "Kim Khánh",
+  "Ngoc Bao",
+  "Quang Chien",
+  "Khac Dat",
+  "Thien Duc",
+  "Trong Duc",
+  "Khanh Ngoc",
+  "Kim Khanh",
   "Mai Trang",
-  "Sử Uyên",
-  "Đức Thục",
-  "Ngọc Sơn"
+  "Su Uyen",
+  "Duc Thuc",
+  "Ngoc Son"
 ];
 
 // Placeholder bank info for QR code generation.
